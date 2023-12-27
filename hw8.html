@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<head>
+<title>Textured 3D Scene</title>
+<script src="https://csc-vu.github.io/lib/three.js"></script>
+<script src="https://csc-vu.github.io/lib/OrbitControls.js"></script>
+
+<script>
+    var scene, camera, renderer; // Three.js rendering basics.
+
+    var canvas; // The canvas on which the image is rendered.
+
+    var mouse; // Used to navigate the scene with the mouse
+
+    var eyelight; //global variable so light can follow camera
+
+    var texLoader;  // Texture loader
+
+    // Global lamp object
+    var luxo;
+
+    // The parts of our lamp
+    var luxoBase, luxoLowerArm, luxoUpperArm, luxoShade; 
+
+    //Global tree object
+    var tree;
+
+    //The parts of the tree
+    var treeTrunk, treeTop;
+
+    //Global building object
+    var building;
+
+   // Create a camera, sitting on the positive z-axis.  The camera is not part of the scene
+    function createCamera() {
+        camera = new THREE.PerspectiveCamera(40, canvas.width/canvas.height, 0.1, 500);
+        camera.position.set(0,3,50);
+
+        // Add orbit control to allow the camera orbit around
+        mouse = new THREE.OrbitControls(camera, renderer.domElement);
+    }
+
+    // Create the lamp base with specified radius and height
+    function createBase(radius, height)
+    {
+        var base = new THREE.Object3D();
+
+        // TODO Step 4: texture the base
+
+        var texture = texLoader.load("wood.jpg");
+        var mat = new THREE.MeshPhongMaterial( { map: texture, side: THREE.DoubleSide } );
+
+        //var mat = new THREE.MeshPhongMaterial( { color: "gray" } );
+
+        // SphereGeometry(radius, horizSeg, vertSeg, horizStartAng, horizLenAngle, vertStartAng, vertLenAng )
+        var geom = new THREE.SphereGeometry(radius, 32, 32, 0, 2*Math.PI, 0, Math.PI/2 );
+        var mesh = new THREE.Mesh(geom, mat);
+        mesh.scale.y = height/radius;
+        mesh.position.y = -height;
+        base.add(mesh);
+
+        // CircleGeometry(radius, segments) 
+        var capGeom = new THREE.CircleGeometry(radius, 32);
+        var capMesh = new THREE.Mesh(capGeom, mat);
+        capMesh.rotation.x = Math.PI / 2;
+        mesh.add(capMesh);
+
+        return base; 
+    }
+
+    // Create a lamp arm with specified radius and height
+    function createArm(radius, height)
+    {
+        var arm = new THREE.Object3D();
+
+        // TODO Step 4: texture the arm
+
+        var texture = texLoader.load("wood.jpg");
+        var mat = new THREE.MeshPhongMaterial( { map: texture, side: THREE.DoubleSide } );
+
+        //var mat = new THREE.MeshPhongMaterial( { color: "skyblue" } );
+
+        // CylinderGeometry(radiusTop, radiusBottom, height) 
+        var geom = new THREE.CylinderGeometry(radius, radius, height, 64, 64);
+        var mesh = new THREE.Mesh(geom, mat);
+        mesh.position.y += height/2;
+        arm.add(mesh);
+
+        return arm;
+    }
+
+    // Create the lamp shade with specified radius and height
+    function createShade(radius, height)
+    {
+        var shade = new THREE.Object3D();
+
+        // TODO Step 4: texture the shade
+
+        var texture = texLoader.load("tile.jpg");
+        var mat = new THREE.MeshPhongMaterial( { map: texture, side: THREE.DoubleSide } );
+
+        //var mat = new THREE.MeshPhongMaterial( { color: 0xFF7F50, side: THREE.DoubleSide } ); 
+
+         // ConeGeometry(radius, height, radialSeg, heightSeg, open?) 
+        var geom = new THREE.ConeGeometry(radius, height, 16, 1, true);
+        var mesh = new THREE.Mesh(geom, mat);
+        mesh.position.y += height/2;
+        mesh.rotation.z = Math.PI;
+        shade.add(mesh);  
+
+        var spotLight = new THREE.SpotLight("white", 1.2); 
+
+        // set spotlight position, direction and angle
+        spotLight.position.set(0, 0, 0);                    // position, relative to parent shade
+        spotLight.target.position.set(0,height,0);          // direction, relative to parent shade
+        spotLight.angle = Math.atan(radius/height) * 0.8;   // slightly smaller than shade angle 
+        spotLight.penumbra = 0.1;                           // outer 10% of spotlight cone fades out
+
+        // add both spotlight and its target to the scene
+        shade.add(spotLight);
+        shade.add(spotLight.target);   
+
+        return shade;
+    }
+
+    function createTrunk(radius, height)
+    {
+        var trunk = new THREE.Object3D();
+
+        var texture = texLoader.load("treetrunk.jpeg");
+        var mat = new THREE.MeshPhongMaterial( { map: texture, side: THREE.DoubleSide } );
+
+        //var mat = new THREE.MeshPhongMaterial( { color: "skyblue" } );
+
+        // CylinderGeometry(radiusTop, radiusBottom, height) 
+        var geom = new THREE.CylinderGeometry(radius, radius, height, 64, 64);
+        var mesh = new THREE.Mesh(geom, mat);
+        //mesh.position.y += height/2;
+        trunk.add(mesh);
+
+        return trunk;
+    }
+
+    function createTreeTop(radius) {
+        var treetop = new THREE.Object3D();
+
+        var texture = texLoader.load("treetop.jpeg");
+        var mat = new THREE.MeshPhongMaterial( { map: texture, side: THREE.DoubleSide } );
+
+        var geom = new THREE.SphereGeometry(radius, 64, 32);
+        var mesh = new THREE.Mesh(geom, mat);
+        //mesh.position.y += height/2;
+        treetop.add(mesh)
+
+        return treetop;
+    }
+
+    // Create the Luxo object using the base, arm and shade parts
+    function createLuxo() {
+
+        // Build the lamp parts
+        var base = createBase(3.5, 1.2);
+        var lowerArm = createArm(0.5, 5);
+        var upperArm = createArm(0.5, 5);
+        var shade = createShade(2.5, 4);
+
+        // Build the lamp hierarchal structure 
+        var lamp = new THREE.Object3D();
+        lamp.add(base);         // add base as a child of lamp    
+        lamp.add(lowerArm);     // add lowerArm as a child of lamp (not base, base can rotate independently)
+        lowerArm.add(upperArm); // add upperArm as a child of lowerArm
+        upperArm.add(shade);    // add shade as a child of upperArm
+  
+        // position children relative to parents
+        base.position.y += 1.2;
+        lowerArm.position.y += 1.2;
+        upperArm.position.y += 5;
+        shade.position.y += 5;
+
+        // shade.children[1].visible = true; // or false
+        return lamp;
+    }
+
+    function createTree() {
+        var trunk = createTrunk(3, 20);
+        var top = createTreeTop(10);
+
+        var tree = new THREE.Object3D();
+        tree.add(trunk);
+        trunk.add(top);
+
+        trunk.position.y += 10;
+        top.position.y += 15;
+
+        return tree;
+    }
+
+    
+    //Create a building with a specific height (complete)
+    function createBuilding(base, height){
+        //(width, height, depth)
+        
+        var texture = texLoader.load("building.jpg");
+        var material = new THREE.MeshPhongMaterial( { map: texture, side: THREE.DoubleSide } );
+
+        var geometry = new THREE.BoxGeometry(base,height,base);
+
+        //var material = new THREE.MeshPhongMaterial({color: 0x5A5A5A, side: THREE.DoubleSide});
+
+        var building = new THREE.Mesh(geometry, material);
+
+        return building;
+    }
+    
+
+    function createBackground(length, width, height)
+    {
+        var background = new THREE.Object3D();
+
+        var texture = texLoader.load("asphalt.jpg");
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set( 2, 2 ); // twice in U and three times in V
+        var material = new THREE.MeshPhongMaterial({ map: texture, side: THREE.DoubleSide}); 
+
+        // create ground
+        var geom = new THREE.PlaneGeometry(length, width); 
+        var ground = new THREE.Mesh( geom, material);
+        ground.rotation.x = Math.PI/2;
+        background.add(ground);
+
+        // TODO Step 5: create and texture your own indoor/outdoor environment ...
+        //PLEASE READ EVEN THOUGH ITS IN COMMENTS
+        //Step 5 was done by creating the
+        //  - createTree function
+        //  - createTreeTop function
+        //  - createTrunk function
+        //and implementing them in the createScene function
+
+        return background; 
+    }
+
+    // Create the scene. This function is called once, as soon as the page loads.
+    // The renderer has already been created before this function is called.
+    function createScene() {
+        
+        renderer.setClearColor(0x29b4ff); // Set background color (0, or 0x000000, is black)
+        scene = new THREE.Scene(); // Create a new scene which we can add objects to
+
+        texLoader = new THREE.TextureLoader(); // used to load texture images
+
+        // create the Luxo lamp and add it to the scene
+        luxo = createLuxo(); // luxo is global
+        luxo.scale.set(0.6, 0.6, 0.6); // scale luxo down
+        scene.add(luxo);        
+
+        // retrieve Luxo parts
+        luxoBase = luxo.children[0];
+        luxoLowerArm = luxo.children[1];
+        luxoUpperArm = luxoLowerArm.children[1];
+        luxoShade = luxoUpperArm.children[1];
+
+        // rotate Luxo parts
+        luxoLowerArm.rotation.z -= 0.3;
+        luxoUpperArm.rotation.z -= 0.8;
+        luxoShade.rotation.z -= 1.4; 
+
+        // position Luxo in the scene
+        luxo.position.set(-15, 0, 10);
+        luxo.rotation.y = -0.3;
+
+        // create background
+        var background = createBackground(40, 40, 20);
+        scene.add(background);
+
+        // lower both Luxo and the background, for a better view
+        luxo.position.y -= 4;
+        background.position.y -= 4;
+
+        //----------------------------------------------------
+        //create tree and add it to the scene
+        tree = createTree(); //tree is global
+        //tree.scale.set(0.6, 0.6, 0.6); // scale tree down
+        scene.add(tree);
+
+        //retrieve tree parts
+        treeTrunk = tree.children[0];
+        treeTop = tree.children[1];
+
+        //position tree in the scene
+        tree.position.set(15, 0, -15);
+
+        //lower tree for a better view
+        tree.position.y -= 4;
+
+        //-----------------------------------------------------
+        //create building and add it to the scene
+        building = createBuilding(8, 60); //building is global
+        scene.add(building);
+
+        //position building in the scene
+        building.position.set(-15, 26, -10);
+
+        //lower building for a better view
+        //building.position.y -= 4;
+     }
+
+
+    // add lights to the scene
+    function createLights()
+    {
+        // Ambient Light (color, intensity)
+        var ambient = new THREE.AmbientLight(0x404040); // soft white
+        scene.add(ambient);
+
+        // DirectionalLight (color, intensity) in the direction the camera faces
+        eyeLight = new THREE.DirectionalLight( "white", 0.7 );  // global, do not redefine here
+        eyeLight.position.set(camera.position.x,camera.position.y,camera.position.z);  // camera viewpoint
+        scene.add(eyeLight);
+
+        // Dim DirectionalLight (color, intensity) shining from above
+        var topLight = new THREE.DirectionalLight( "white", 0.3 ); 
+        topLight.position.set(0,20,0);
+        scene.add( topLight );
+    }
+
+    function update() {
+        mouse.update();
+        // eyeLight.position.set(camera.position.x,camera.position.y,camera.position.z); // too bright
+        // console.log(camera.position.x,camera.position.y,camera.position.z); // find best view
+    }
+
+    // Render the scene. This is called for each frame of the animation.
+    function render() {
+
+        // Loop
+        requestAnimationFrame(render);
+
+        // code for things to change here
+
+        // Re-render the scene
+        renderer.render(scene, camera);
+
+        update();
+    }
+
+    //----------------------------------------------------------------------------------
+
+    // reset canvas size and camera aspect ratio on window resize
+    function onWindowResize() {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+    }
+    
+    // The init() function is called by the onload event when the document has loaded.
+    function init() {
+        try {
+            canvas = document.getElementById("glcanvas");
+            renderer = new THREE.WebGLRenderer( { canvas: canvas, antialias: true} );
+            // set full screen
+            renderer.setSize(window.innerWidth, window.innerHeight); 
+            // adjust on window resize
+            window.addEventListener('resize', onWindowResize);  
+        }
+        catch (e) {
+            document.getElementById("canvas-holder").innerHTML = "<h3><b>WebGL is not available.</b><h3>";
+            return;
+        }
+    
+        // create camera
+        createCamera();
+        
+        // create scene 
+        createScene();
+
+        // create lights 
+        createLights();
+
+        // render scene
+        render();
+    }
+
+</script>
+
+</head>
+<body onload="init()">
+<div id="canvas-holder">
+    <canvas id="glcanvas" width="600" height="400"></canvas>
+</div>
+</body>
+</html>
